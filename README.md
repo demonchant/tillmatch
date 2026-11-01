@@ -65,7 +65,7 @@ For a full data-backed walkthrough, use authorized Paystack settlement records a
 
 The developer currently has access to Paystack test mode only. Paystack test mode does not process settlements, so a test key cannot produce a genuine payout-to-bank reconciliation. Until authorized real settlement and bank records are available, the honest demo is the hosted product, authenticated empty state, and the source review workflow; no live match should be claimed. The app includes no seeded merchant transactions. Its small synthetic CSV fixture is isolated under `test/fixtures/` for parser tests and is never loaded by the product.
 
-An agent response is optional for the test-only walkthrough. If you choose to show one, configure a model provider supported by Agent-Native and show the actual response. This project does not require OpenAI. A prompt suitable for an empty workspace is:
+An agent response is optional for the test-only walkthrough; the closeout workflow does not require a model credential. If you choose to show an agent response, configure a supported model provider and show its actual output. A prompt suitable for an empty workspace is:
 
 > Using only the records available in this workspace, tell me whether any Paystack settlement has a matching bank credit. If no records are loaded, say that no conclusion is possible. Do not invent records or confirm a match.
 
@@ -124,7 +124,7 @@ Configure these values in Render's service environment:
 | `PAYSTACK_SECRET_KEY` | Enter your Paystack `sk_test_...` key when Render prompts for the secret |
 | `PAYSTACK_ENVIRONMENT` | Set to `test` by the Blueprint; it matches your current test key |
 
-The test secret is the only application secret you need to enter for the current build. Keep it in Render's secret settings and out of GitHub, the browser, and screen recordings. The Blueprint does not request an OpenAI key; Tillmatch does not require OpenAI.
+The Paystack test secret is the only application secret you need to enter for the current build. Keep it in Render's secret settings and out of GitHub, the browser, and screen recordings. The closeout workflow does not require a model-provider credential.
 
 On Render, leave `APP_URL` and `BETTER_AUTH_URL` unset so the public origin can be inferred. Keep production authentication enabled. Never commit secrets or enter them in a browser field, chat prompt, README, or recording. After deploying, check `/`, `/landing`, `/dashboard`, and `/chat`; then sign in and verify the authenticated dashboard and its real data state.
 
