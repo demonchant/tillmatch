@@ -6,6 +6,8 @@ Tillmatch is a payout closeout workspace for merchants and finance operators. It
 
 **Live app:** [tillmatch.onrender.com](https://tillmatch.onrender.com)
 
+**Deployment status:** The last Render logs supplied for this project showed an SSR runtime error because `yjs` was missing. The current source declares `yjs` as a production dependency, but this workspace has not verified a redeployment. Treat the hosted URL as unverified until the current repository is deployed and its pages and signed-in dashboard are checked again.
+
 **The problem:** payout reconciliation is often a manual comparison between one provider's settlement report and another institution's bank statement. The records use different references and arrive at different times. An exact match is straightforward; a delayed, ambiguous, partial, or batched deposit needs investigation. A spreadsheet can show matching amounts, but it does not by itself preserve why a match was proposed or who accepted it.
 
 **The solution:** Tillmatch imports both sides, applies a conservative deterministic rule, records its source and outcome, and leaves uncertain rows open. It never moves money and never treats an AI response as financial approval.
@@ -65,7 +67,44 @@ The hosted app is [tillmatch.onrender.com](https://tillmatch.onrender.com). Its 
 
 For a full data-backed walkthrough, use authorized Paystack settlement records and the corresponding real bank statement. The flow is: import/read both sources → run closeout → inspect the proposed match and unresolved rows → confirm only after checking the sources → reload and show the saved confirmation → export the report.
 
-The developer currently has access to Paystack test mode only. Paystack test mode does not process settlements, so a test key cannot produce a genuine payout-to-bank reconciliation. Until authorized real settlement and bank records are available, the honest demo is the hosted product, authenticated empty state, and the source review workflow; no live match should be claimed. The app includes no seeded merchant transactions. Its small synthetic CSV fixture is isolated under `test/fixtures/` for parser tests and is never loaded by the product.
+The developer currently has access to Paystack test mode only. Paystack test mode does not process settlements, so a test key cannot produce a genuine payout-to-bank reconciliation. Until authorized real settlement and bank records are available, the honest demo is the hosted product, authenticated empty state, and the source review workflow; no live match should be claimed. The real closeout view does not seed merchant transactions. A separate authenticated simulation preview uses three fictional settlement rows and four fictional bank credits only in browser memory; it invokes no server actions and writes nothing. The optional example CSVs are visibly marked and rejected by both import parsers. The small synthetic CSV under `test/fixtures/` remains isolated to parser tests.
+
+### What the current test-mode demo can prove
+
+The current hosted configuration uses a Paystack **test** secret. A successful authenticated request can demonstrate that the server reached Paystack's test environment, but it cannot demonstrate a genuine payout: Paystack does not process settlements in test mode. An empty settlement response is therefore not a reconciliation result. A test key must never be described as a live integration or as evidence that money reached a bank. Paystack explains this limitation in its [test/live authentication guide](https://paystack.com/docs/api/authentication/).
+
+The recording opens with the manual closeout problem, then shows the public Tillmatch page, the signed-in workspace and its source controls, and the agent workspace. Its animated diagrams explain the intended data flow and are explicitly explanatory graphics, not imported transactions or API results. The recording does not show a real settlement, bank credit, saved match, or completed API read. The dashboard's empty state is the truthful state while real source records are absent. The authenticated **Try simulation (fictional)** view is available for a separate, client-only explanation of exact candidates and open rows; it is not a Paystack API or bank-data demonstration.
+
+### What happens with live Paystack data
+
+For a real closeout, a merchant needs all of the following:
+
+1. A Paystack business activated for live use, with a server-side `sk_live_...` key stored in the deployment's secret environment. The key is never entered in the browser, committed to Git, or shown in a recording.
+2. Actual successful settlement records for the selected period. Tillmatch's Paystack integration uses the read-only settlements listing endpoint and date filters; it cannot cause a settlement to happen. Paystack describes this endpoint in its [Settlements API documentation](https://paystack.com/docs/api/settlement/).
+3. The real bank statement from the account that receives those payouts, uploaded by an authenticated user with the date, credit amount and currency mapped to the correct columns.
+4. A review of Tillmatch's source-linked candidate. Only an exact, unique one-to-one amount and currency match inside the configured three-day window is suggested. The person checks the evidence and confirms it; uncertain, late, missing, partial, or batched amounts remain open.
+
+Switching from a test key to a live key does not create a payout, grant bank access, or make a match. The live flow can only compare real records that the merchant is authorized to provide. Tillmatch is a closeout and review tool; it does not initiate transfers or replace the merchant's accounting controls.
+
+### Data and decision boundaries
+
+- The UI keeps test and live closeouts separate. Use the environment selector that matches the credential and source file.
+- API access is server-side and read-only. CSV uploads are parsed in memory, validated, mapped explicitly, and not retained as raw files. The stored fields support matching and source traceability; the app does not need bank account numbers or customer names.
+- Amounts are normalized to integer minor units before comparison. Currency must match exactly. The matching engine does not infer fees, split payouts, combine credits, or treat date proximity alone as proof.
+- A suggested match is not a confirmed match. Confirmation rechecks that the source rows still exist and have not already been used, then persists the signed-in reviewer and time. The agent may explain available evidence but does not receive the confirmation action.
+- A provider error, missing credential, empty source set, invalid row, or ambiguous candidate stays an error or open review item. None is translated into a successful match.
+- `test/fixtures/paystack-small.csv` is a parser unit-test fixture only. It contains synthetic rows and is never a product seed, demo import, or evidence of a Paystack response.
+- The authenticated simulation preview is a separate mode. Its candidate rows are labeled simulated, its controls cannot confirm a result, and leaving it returns to the real-data workspace. The example CSVs in `public/demo/` include a `SIMULATION_ONLY` column; both real-data import paths reject that marker before storage.
+
+### Suggested screen-recording narration
+
+> When a payment provider says a payout was sent, the merchant still needs to answer one practical question: did that money arrive in the bank? Finance teams often compare settlement reports and statements by hand, while different references, delays, combined deposits, and missing credits make the answer hard to prove.
+>
+> Tillmatch brings both sides into one closeout. An authorized user chooses the Paystack environment, reads settlement records or imports a real provider export, and maps the bank statement from the account that receives payouts. The rule is cautious: exact amount, exact currency, a unique one-to-one pair, and a bounded date window. A candidate is only a suggestion. Uncertain deposits stay open, and a person checks the source evidence before confirming. The agent can explain the evidence but cannot approve the match.
+>
+> This demonstration uses a Paystack test account. Test mode is a sandbox; Paystack does not process settlements there. This video therefore does not show a genuine payout or bank reconciliation. In live use, an activated merchant configures a live secret key on the server, Tillmatch reads actual settlements, and the merchant supplies the corresponding real bank statement. The application compares those records and still asks a person to confirm. A live key alone does not create a payout or provide bank data.
+
+The longer Ezinne-voiced, captioned edit is produced from the separate workspace screen recording; the recording and generated video are not runtime data for the application. For a live-data walkthrough, replace the empty-state section only after real authorized settlement and corresponding bank records are available. Do not use the test parser fixture as if it were live evidence.
 
 An agent response is optional for the test-only walkthrough; the closeout workflow does not require a model credential. If you choose to show an agent response, configure a supported model provider and show its actual output. A prompt suitable for an empty workspace is:
 
@@ -135,11 +174,12 @@ On Render, leave `APP_URL` and `BETTER_AUTH_URL` unset so the public origin can 
 | Path | Purpose |
 | --- | --- |
 | `app/routes/landing.tsx` | Public Tillmatch product page |
-| `app/routes/dashboard.tsx` | Closeout dashboard, CSV mapping, review, and export |
+| `app/routes/dashboard.tsx` | Authenticated real-data closeout plus a separate client-only simulation preview |
 | `actions/actions/` | Authenticated application operations and agent-tool permissions |
 | `src/csv.mjs` | Strict CSV parsing and amount/date normalization |
 | `src/matcher.mjs` | Deterministic exact, unique one-to-one match logic |
 | `src/paystack.mjs` | Read-only Paystack settlement API client |
+| `public/demo/` | Fictional example CSVs with a marker rejected by real import parsers |
 | `server/server/db/schema.ts` | Persisted source records, runs, results, and confirmations |
 | `test/` | Isolated parser, matcher, and Paystack client tests |
 | `render.yaml` | Render service configuration |

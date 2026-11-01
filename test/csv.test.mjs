@@ -50,6 +50,17 @@ test("maps Paystack export fields explicitly and converts selected major-unit am
   }, "major"), /Duplicate settlement ID/);
 });
 
+test("refuses explicitly marked simulation CSVs at both real import boundaries", () => {
+  const simulatedPaystack = "SIMULATION_ONLY,id,date,amount,currency,status\nTRUE,900000001,2026-10-26,34250.00,NGN,success";
+  const simulatedBank = "SIMULATION_ONLY,date,amount,currency\nTRUE,2026-10-27,34250.00,NGN";
+  assert.throws(() => makePaystackSettlementRows(simulatedPaystack, {
+    id: "id", date: "date", amount: "amount", currency: "currency", status: "status",
+  }, "major"), /SIMULATION_ONLY.*cannot be imported/);
+  assert.throws(() => makeBankRows(simulatedBank, {
+    date: "date", amount: "amount", currency: "currency",
+  }), /SIMULATION_ONLY.*cannot be imported/);
+});
+
 test("unit fixture remains isolated and is not imported by product code", async () => {
   const fixture = await readFile(new URL("./fixtures/paystack-small.csv", import.meta.url), "utf8");
   assert.match(fixture, /^# UNIT TEST FIXTURE ONLY/m);

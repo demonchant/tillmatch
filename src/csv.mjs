@@ -5,6 +5,12 @@ export class CsvInputError extends Error {
   }
 }
 
+function rejectSimulationFixture(headers) {
+  if (headers.some((header) => header.trim().toLowerCase() === "simulation_only")) {
+    throw new CsvInputError("This file is marked SIMULATION_ONLY and cannot be imported into a real closeout.");
+  }
+}
+
 // Strict RFC-4180-style parser for user-owned CSV text; does not infer success.
 export function parseCsv(text, { maxBytes = 2_000_000, maxRows = 20_000 } = {}) {
   if (typeof text !== "string" || Buffer.byteLength(text, "utf8") > maxBytes) {
@@ -85,6 +91,7 @@ export function parseIsoDate(value) {
 
 export function makeBankRows(text, mapping) {
   const { headers, records } = parseCsv(text);
+  rejectSimulationFixture(headers);
   const required = ["date", "amount", "currency"];
   for (const key of required) {
     if (!mapping?.[key] || !headers.includes(mapping[key])) throw new CsvInputError(`Choose a CSV column for ${key}.`);
@@ -109,6 +116,7 @@ export function makePaystackSettlementRows(text, mapping, amountUnit) {
     throw new CsvInputError("Choose whether the amount column is in minor or major currency units.");
   }
   const { headers, records } = parseCsv(text);
+  rejectSimulationFixture(headers);
   for (const key of ["id", "date", "amount", "currency", "status"]) {
     if (!mapping?.[key] || !headers.includes(mapping[key])) throw new CsvInputError(`Choose a CSV column for ${key}.`);
   }

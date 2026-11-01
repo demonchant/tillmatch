@@ -1,5 +1,6 @@
 ﻿import { useActionMutation, useActionQuery } from "@agent-native/core/client/hooks";
 import { useMemo, useState } from "react";
+import { matchSettlements } from "../../src/matcher.mjs";
 import "./closeout.css";
 
 type CsvPreview = { headers: string[]; rowCount: number };
@@ -38,6 +39,12 @@ function errorText(error: unknown) { return error instanceof Error ? error.messa
 export function meta() { return [{ title: "Tillmatch dashboard - Payout closeout" }, { name: "description", content: "Compare Paystack settlements with bank statement credits and review source-linked exceptions." }]; }
 
 export default function DashboardRoute() {
+  const [simulationMode, setSimulationMode] = useState(false);
+  if (simulationMode) return <SimulationWorkflow onBack={() => setSimulationMode(false)} />;
+  return <RealDashboard onOpenSimulation={() => setSimulationMode(true)} />;
+}
+
+function RealDashboard({ onOpenSimulation }: { onOpenSimulation: () => void }) {
   const [environment, setEnvironment] = useState<"" | "test" | "live">("");
   const [paystackFile, setPaystackFile] = useState<Upload | null>(null);
   const [bankFile, setBankFile] = useState<Upload | null>(null);
@@ -147,6 +154,7 @@ export default function DashboardRoute() {
       <header className="tm-header">
         <a className="tm-brand" href="/" aria-label="Tillmatch home"><span className="tm-brand-mark">T</span><span>tillmatch</span></a>
         <nav aria-label="Primary"><a className="active" href="/dashboard">Dashboard</a><a href="#sources">Sources</a><a href="#exceptions">Exceptions</a></nav>
+        <button className="tm-demo-link" type="button" onClick={onOpenSimulation}>Try simulation <span aria-hidden="true">(fictional)</span></button>
         <a className="tm-agent-link" href="/chat">Ask the agent <span aria-hidden="true">-&gt;</span></a>
       </header>
 
@@ -177,4 +185,71 @@ export default function DashboardRoute() {
       <footer className="tm-footer"><a href="/">Tillmatch home</a><span>Read-only Paystack / no money movement / unresolved stays unresolved</span><a href="/chat">Agent workspace -&gt;</a></footer>
     </main>
   );
+}
+
+const simulatedSettlements = [
+  { id: "SIM-PS-001", settlementDate: "2026-10-26", amountMinor: 3_425_000, currency: "NGN", status: "success" },
+  { id: "SIM-PS-002", settlementDate: "2026-10-27", amountMinor: 1_890_050, currency: "NGN", status: "success" },
+  { id: "SIM-PS-003", settlementDate: "2026-10-26", amountMinor: 960_000, currency: "NGN", status: "success" },
+];
+const simulatedBankCredits = [
+  { id: "SIM-BANK-001", postedOn: "2026-10-27", amountMinor: 3_425_000, currency: "NGN" },
+  { id: "SIM-BANK-002", postedOn: "2026-10-29", amountMinor: 1_890_050, currency: "NGN" },
+  { id: "SIM-BANK-003", postedOn: "2026-10-26", amountMinor: 480_000, currency: "NGN" },
+  { id: "SIM-BANK-004", postedOn: "2026-11-01", amountMinor: 5_500_000, currency: "NGN" },
+];
+
+function SimulationWorkflow({ onBack }: { onBack: () => void }) {
+  const [showPreview, setShowPreview] = useState(false);
+  const preview = useMemo(() => matchSettlements(simulatedSettlements, simulatedBankCredits, { windowDays: 3 }), []);
+  const candidateCount = preview.results.filter((row) => row.status === "matched").length;
+  const openSettlementCount = preview.results.filter((row) => row.status !== "matched").length;
+  const bankById = new Map(simulatedBankCredits.map((bank) => [bank.id, bank]));
+  const settlementById = new Map(simulatedSettlements.map((settlement) => [settlement.id, settlement]));
+
+  return <main className="tillmatch tm-simulation">
+    <header className="tm-header">
+      <a className="tm-brand" href="/" aria-label="Tillmatch home"><span className="tm-brand-mark">T</span><span>tillmatch</span></a>
+      <nav aria-label="Primary"><span>Dashboard</span><span className="tm-sim-nav-active">Simulation preview</span></nav>
+      <button className="tm-agent-link tm-back-link" type="button" onClick={onBack}>Back to real closeout</button>
+    </header>
+
+    <section className="tm-sim-banner" role="note" aria-label="Simulation only notice">
+      <strong>SIMULATION ONLY</strong>
+      <p>Fictional example records for explaining the matching rule. Not Paystack data, not a bank statement, and not part of your real closeout.</p>
+    </section>
+
+    <section className="tm-hero tm-sim-hero">
+      <div><p className="tm-eyebrow">ILLUSTRATIVE WORKFLOW / NO FINANCIAL DATA</p><h1>See how a careful closeout works.</h1><p className="tm-lede">This preview runs Tillmatch's deterministic matcher in your browser using a tiny, fictional set. It cannot read credentials, call a server action, save records, or confirm a match.</p></div>
+      <div className="tm-run-card tm-sim-run-card"><span className="tm-sim-number">3</span><span>simulated settlements</span><span className="tm-sim-number">4</span><span>simulated bank credits</span></div>
+    </section>
+
+    <section className="tm-sim-data-grid" aria-label="Fictional source records">
+      <article className="tm-source-card"><div className="tm-card-heading"><span className="tm-source-num">A</span><div><h2>Simulated settlements</h2><p>Not fetched from Paystack</p></div></div><div className="tm-sim-records">{simulatedSettlements.map((row) => <div className="tm-sim-record" key={row.id}><code>{row.id}</code><span>{row.settlementDate}</span><strong>{money(row.amountMinor, row.currency)}</strong><small>fictional / {row.status}</small></div>)}</div></article>
+      <article className="tm-source-card"><div className="tm-card-heading"><span className="tm-source-num">B</span><div><h2>Simulated bank credits</h2><p>Not from a financial institution</p></div></div><div className="tm-sim-records">{simulatedBankCredits.map((row) => <div className="tm-sim-record" key={row.id}><code>{row.id}</code><span>{row.postedOn}</span><strong>{money(row.amountMinor, row.currency)}</strong><small>fictional / credit</small></div>)}</div></article>
+    </section>
+
+    <section className="tm-sim-rule"><span className="tm-eyebrow">THE PREVIEW RULE</span><p>Exact amount + exact currency + one unique bank credit inside three calendar days. A suggested candidate is not a confirmed match.</p><button className="tm-primary" type="button" onClick={() => setShowPreview(true)}>{showPreview ? "Preview calculated locally" : "Preview simulated closeout"}<span aria-hidden="true">-&gt;</span></button></section>
+
+    {showPreview && <section className="tm-sim-result-section" aria-live="polite">
+      <div className="tm-section-heading"><div><p className="tm-eyebrow">SIMULATED RESULT / NOT SAVED</p><h2>Suggestions and open rows</h2></div><p>{candidateCount} candidate suggestions / {openSettlementCount} settlement left open / no confirmation is available here.</p></div>
+      <div className="tm-sim-results">{preview.results.map((row) => {
+        const settlement = settlementById.get(row.settlementId);
+        const bank = row.bankCreditId ? bankById.get(row.bankCreditId) : undefined;
+        return <article className="tm-sim-result" key={row.settlementId}>
+          <div><span className="tm-sim-label">SIMULATED PAYSTACK ROW</span><strong>{settlement ? money(settlement.amountMinor, settlement.currency) : "Settlement"}</strong><code>{row.settlementId} / {settlement?.settlementDate}</code></div>
+          <div><span className="tm-sim-label">SIMULATED BANK ROW</span>{bank ? <><strong>{money(bank.amountMinor, bank.currency)}</strong><code>{bank.id} / {bank.postedOn}</code></> : <span className="tm-muted">No unique exact credit linked</span>}</div>
+          <div><span className={`tm-pill ${row.status === "matched" ? "tm-pill-simulated" : "tm-pill-unmatched"}`}>{row.status === "matched" ? "candidate / simulated" : `${row.status} / simulated`}</span><p>{row.reason}</p></div>
+        </article>;
+      })}{preview.unmatchedBankCreditIds.map((id) => {
+        const bank = bankById.get(id);
+        return <article className="tm-sim-result" key={id}><div><span className="tm-sim-label">NO UNIQUE SETTLEMENT LINK</span></div><div><strong>{bank ? money(bank.amountMinor, bank.currency) : "Bank credit"}</strong><code>{id} / {bank?.postedOn}</code></div><div><span className="tm-pill tm-pill-unmatched">unmatched bank credit / simulated</span><p>It stays open. No partial, fee, or batch explanation is guessed.</p></div></article>;
+      })}</div>
+      <p className="tm-sim-no-write"><strong>Nothing was imported, written, or confirmed.</strong> In the real closeout, an authenticated reviewer checks actual source evidence and confirms an eligible candidate.</p>
+    </section>}
+
+    <section className="tm-sim-downloads"><div><p className="tm-eyebrow">OPTIONAL EXAMPLE FILES</p><h2>Clearly marked simulation CSVs</h2><p>These carry a <code>SIMULATION_ONLY</code> marker and the real import parsers reject them. They are for inspecting the example format only.</p></div><div><a className="tm-secondary" href="/demo/SIMULATION-ONLY-paystack-settlements.csv" download>Paystack example CSV</a><a className="tm-secondary" href="/demo/SIMULATION-ONLY-bank-credits.csv" download>Bank example CSV</a></div></section>
+
+    <footer className="tm-footer"><a href="/">Tillmatch home</a><span>Fictional values / local-only computation / real data stays separate</span><button type="button" onClick={onBack}>Return to real closeout</button></footer>
+  </main>;
 }
