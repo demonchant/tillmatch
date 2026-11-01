@@ -4,6 +4,9 @@ import "./closeout.css";
 
 type CsvPreview = { headers: string[]; rowCount: number };
 type Upload = { csvText: string; preview: CsvPreview; mapping: Record<string, string> };
+type PaystackMapping = { id: string; date: string; amount: string; currency: string; status: string };
+type BankMapping = { date: string; amount: string; currency: string };
+type ReviewCode = "waiting_for_bank_post" | "partial_or_batched" | "provider_record_check" | "needs_bookkeeper_followup";
 type BankCredit = { id: string; importId: string; sourceRow: number; postedOn: string; amountMinor: number; currency: string; sourceHash: string | null };
 type MatchRow = {
   id: string; status: string; reason: string; reviewCode?: string | null; reviewedAt?: string | null;
@@ -89,7 +92,7 @@ export default function DashboardRoute() {
   async function savePaystack() {
     if (!paystackFile || !environment || !amountUnit) { setNotice("Select a Paystack CSV, test/live environment, and amount unit."); return; }
     try {
-      const result = await importPaystack.mutateAsync({ csvText: paystackFile.csvText, environment, mapping: paystackFile.mapping, amountUnit }) as { importedCount: number; fileHash: string };
+      const result = await importPaystack.mutateAsync({ csvText: paystackFile.csvText, environment, mapping: paystackFile.mapping as PaystackMapping, amountUnit }) as { importedCount: number; fileHash: string };
       setNotice(`Imported ${result.importedCount} settlement rows. Source SHA-256 ${result.fileHash.slice(0, 12)}...`);
       setPaystackFile(null); setAmountUnit(""); await query.refetch();
     } catch (error) { setNotice(errorText(error)); }
@@ -98,7 +101,7 @@ export default function DashboardRoute() {
   async function saveBank() {
     if (!bankFile) { setNotice("Select a bank statement CSV first."); return; }
     try {
-      const result = await importBank.mutateAsync({ csvText: bankFile.csvText, mapping: bankFile.mapping }) as { importedCount: number; duplicate: boolean; fileHash: string };
+      const result = await importBank.mutateAsync({ csvText: bankFile.csvText, mapping: bankFile.mapping as BankMapping }) as { importedCount: number; duplicate: boolean; fileHash: string };
       setNotice(`${result.duplicate ? "Reused" : "Imported"} ${result.importedCount} positive bank credits. Source SHA-256 ${result.fileHash.slice(0, 12)}...`);
       setBankFile(null); await query.refetch();
     } catch (error) { setNotice(errorText(error)); }
@@ -121,7 +124,7 @@ export default function DashboardRoute() {
     catch (error) { setNotice(errorText(error)); }
   }
 
-  async function tagException(row: MatchRow, reviewCode: string) {
+  async function tagException(row: MatchRow, reviewCode: ReviewCode) {
     try { await reviewException.mutateAsync({ matchResultId: row.id, reviewCode }); setNotice("Follow-up tag saved. The exception remains open."); await query.refetch(); }
     catch (error) { setNotice(errorText(error)); }
   }
@@ -168,7 +171,7 @@ export default function DashboardRoute() {
       <section className="tm-results" aria-label="Settlement match results"><div className="tm-results-head"><span>PAYSTACK SOURCE</span><span>BANK SOURCE</span><span>REVIEW STATUS</span></div>{rows.map((row) => <article className="tm-result-row" key={row.id}>
         <div className="tm-settlement-cell"><strong>{row.settlement ? money(row.settlement.amountMinor, row.settlement.currency) : "Settlement unavailable"}</strong><span>{row.settlement?.sourceId ?? "Source row unavailable"} / {row.settlement?.settlementDate ?? "-"}</span><small>{row.settlement?.source === "paystack_api" ? "Paystack API" : `Paystack CSV row ${row.settlement?.sourceRow ?? "-"}`} / {sourceLabel(row.settlement?.sourceHash)}</small></div>
         <div className="tm-bank-cell">{row.bankCredit ? <><strong>{money(row.bankCredit.amountMinor, row.bankCredit.currency)}</strong><span>Statement row {row.bankCredit.sourceRow} / {row.bankCredit.postedOn}</span><small>{sourceLabel(row.bankCredit.sourceHash)}</small></> : row.candidateBankCredits.length ? row.candidateBankCredits.map((bank) => <span key={bank.id}><strong>{money(bank.amountMinor, bank.currency)}</strong> / row {bank.sourceRow} / {bank.postedOn}</span>) : <span className="tm-muted">No unique bank row linked</span>}</div>
-        <div className="tm-review-cell"><span className={`tm-pill tm-pill-${row.status}`}>{row.status.replace(/_/g, " ")}</span><p>{row.reason}</p>{row.status === "candidate_match" && row.bankCredit && <button className="tm-confirm" type="button" onClick={() => void confirm(row)} disabled={pending}>Confirm exact source match</button>}{row.status === "confirmed" && <small>Confirmed by a signed-in reviewer / {row.reviewedAt ? new Date(row.reviewedAt).toLocaleString() : "time unavailable"}</small>}{row.status !== "candidate_match" && row.status !== "confirmed" && <label className="tm-review-select">Add follow-up tag<select aria-label={`Follow-up tag for settlement ${row.settlement?.sourceId ?? "unknown"}`} value={row.reviewCode ?? ""} onChange={(event) => event.target.value && void tagException(row, event.target.value)}><option value="">Choose a tag</option>{reviewTags.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>}</div>
+        <div className="tm-review-cell"><span className={`tm-pill tm-pill-${row.status}`}>{row.status.replace(/_/g, " ")}</span><p>{row.reason}</p>{row.status === "candidate_match" && row.bankCredit && <button className="tm-confirm" type="button" onClick={() => void confirm(row)} disabled={pending}>Confirm exact source match</button>}{row.status === "confirmed" && <small>Confirmed by a signed-in reviewer / {row.reviewedAt ? new Date(row.reviewedAt).toLocaleString() : "time unavailable"}</small>}{row.status !== "candidate_match" && row.status !== "confirmed" && <label className="tm-review-select">Add follow-up tag<select aria-label={`Follow-up tag for settlement ${row.settlement?.sourceId ?? "unknown"}`} value={row.reviewCode ?? ""} onChange={(event) => event.target.value && void tagException(row, event.target.value as ReviewCode)}><option value="">Choose a tag</option>{reviewTags.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>}</div>
       </article>)}{(report?.unmatchedBankCredits ?? []).map((bank) => <article className="tm-result-row tm-orphan-row" key={`bank-${bank.id}`}><div className="tm-muted">No unique Paystack settlement links to this credit.</div><div className="tm-bank-cell"><strong>{money(bank.amountMinor, bank.currency)}</strong><span>Statement row {bank.sourceRow} / {bank.postedOn}</span><small>{sourceLabel(bank.sourceHash)}</small></div><div className="tm-review-cell"><span className="tm-pill tm-pill-unmatched">unmatched bank credit</span><p>Keep open. Do not infer a fee, duplicate or missing payout from amount alone.</p></div></article>)}{report?.state === "available" && !rows.length && <p className="tm-empty-results">This closeout has no settlement results.</p>}{!environment && <p className="tm-empty-results">Choose a Paystack environment to see saved closeout evidence.</p>}</section>
       {report?.run && <p className="tm-agent-hint">Ask the agent to inspect closeout <code>{report.run.id}</code>. It can explain stored source facts; a person confirms any match.</p>}
       <footer className="tm-footer"><a href="/">Tillmatch home</a><span>Read-only Paystack / no money movement / unresolved stays unresolved</span><a href="/chat">Agent workspace -&gt;</a></footer>

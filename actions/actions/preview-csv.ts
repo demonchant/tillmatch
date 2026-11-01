@@ -1,6 +1,6 @@
 import { defineAction, fail } from "@agent-native/core/action";
 import { z } from "zod";
-import { parseCsv, CsvInputError } from "../src/csv.mjs";
+import { parseCsv, CsvInputError } from "../../src/csv.mjs";
 
 export default defineAction({
   description: "Preview the header names and row count from an uploaded CSV so the signed-in person can explicitly map columns. Never returns row values and does not persist the file.",
