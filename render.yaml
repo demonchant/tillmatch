@@ -11,12 +11,20 @@ services:
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: tillmatch-postgres
+          property: connectionString
       - key: BETTER_AUTH_SECRET
         generateValue: true
       - key: PAYSTACK_SECRET_KEY
         sync: false
       - key: PAYSTACK_ENVIRONMENT
         value: test
-      - key: OPENAI_API_KEY
-        sync: false
+
+databases:
+  - name: tillmatch-postgres
+    databaseName: tillmatch
+    user: tillmatch
+    plan: free
+    region: frankfurt
+    postgresMajorVersion: "16"
