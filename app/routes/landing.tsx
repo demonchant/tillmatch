@@ -36,20 +36,15 @@ export default function LandingRoute() {
           </div>
           <p className="landing-trust"><span aria-hidden="true">&#9679;</span> Read-only Paystack access <span aria-hidden="true">/</span> No money movement <span aria-hidden="true">/</span> People confirm matches</p>
         </div>
-        <div className="landing-visual" aria-label="A diagram of Paystack records and bank statement credits flowing into a human-reviewed closeout">
-          <div className="landing-orbit landing-orbit-one" />
-          <div className="landing-orbit landing-orbit-two" />
-          <div className="landing-stamp">SOURCE<br />BEFORE<br />STATUS</div>
-          <div className="landing-flow-card">
-            <div className="landing-flow-head"><span>THE CLOSEOUT PATH</span><span>3 CHECKS</span></div>
-            <div className="landing-source-row"><span className="landing-source-icon">P</span><div><strong>Paystack settlement</strong><small>Provider record</small></div><span className="landing-source-tag">SOURCE A</span></div>
-            <div className="landing-flow-connector"><span /></div>
-            <div className="landing-source-row"><span className="landing-source-icon landing-bank-icon">B</span><div><strong>Bank credit</strong><small>Statement row</small></div><span className="landing-source-tag">SOURCE B</span></div>
-            <div className="landing-flow-rule"><span className="landing-rule-check">&#10003;</span><div><strong>Exact amount + currency</strong><small>Then check the posting window</small></div><span className="landing-rule-label">RULE-BASED</span></div>
-            <div className="landing-flow-foot"><span className="landing-human-dot" /> A person confirms each match</div>
-          </div>
-          <p className="landing-visual-caption">A match is a claim. The source rows are the evidence.</p>
-        </div>
+        <figure className="landing-visual">
+          <img
+            src="/tillmatch-reconciliation-workflow.png"
+            alt="Illustration of a finance operator reviewing a possible match between Paystack settlements and bank statement credits."
+            fetchPriority="high"
+            decoding="async"
+          />
+          <figcaption>Illustration only — no live transaction data.</figcaption>
+        </figure>
       </section>
 
       <section className="landing-workflow" id="workflow">
