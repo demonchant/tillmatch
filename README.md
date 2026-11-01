@@ -1,57 +1,86 @@
 # Tillmatch
 
-**Tillmatch helps a merchant close the gap between a Paystack payout and the credit that actually reached the bank.** It brings both sources into one closeout, shows the evidence behind each possible match, and leaves the decision with a person.
+### Close the loop between a Paystack payout and the money credited to the bank.
 
-Tillmatch is built for operators and finance teams who currently compare payout notices with bank statements by hand. A missing, delayed, partial, or batched credit can be hard to distinguish from a normal payout when the records live in separate systems. Tillmatch makes the comparison traceable without pretending uncertain data is settled.
+Tillmatch is a payout closeout workspace for merchants and finance operators. It brings Paystack settlement records and bank statement credits into one review flow, shows the source evidence behind each result, and keeps a person responsible for confirming a match.
 
-## End-to-end user workflow
+**The problem:** payout reconciliation is often a manual comparison between one provider's settlement report and another institution's bank statement. The records use different references and arrive at different times. An exact match is straightforward; a delayed, ambiguous, partial, or batched deposit needs investigation. A spreadsheet can show matching amounts, but it does not by itself preserve why a match was proposed or who accepted it.
 
-1. **Sign in.** A merchant opens the private closeout dashboard. Settlement and bank records are scoped to the signed-in account.
-2. **Choose the Paystack environment.** Test and live records are kept separate. For a real closeout, the selected environment must match the source records.
-3. **Bring in the Paystack settlement.** The user can make a server-side, read-only request to Paystack's settlement list for a date range, or import a real settlement CSV and map its ID, date, amount, currency, and status columns. The user explicitly selects whether CSV amounts are major or minor currency units.
-4. **Bring in the receiving bank's statement credits.** The user selects the date, amount, and currency columns from a real bank CSV. Only positive credits are accepted.
-5. **Run closeout.** Tillmatch compares the selected account's saved records. A settlement is a candidate only when exactly one unclaimed bank credit has the same currency and exact minor-unit amount within the selected date window (three days by default).
-6. **Review the evidence.** Each result points to its Paystack source ID or CSV row and bank statement row, along with dates, amount, currency, source hash where available, status, and reason. Ambiguous, invalid, non-settled, unmatched, partial, and many-to-one cases remain open for review; Tillmatch does not infer fees or combine rows.
-7. **Confirm deliberately.** A signed-in person inspects both records and confirms an exact candidate. Confirmation is an explicit user action; the agent cannot confirm a financial match.
-8. **Check the saved result and export.** The dashboard reads persisted results back after writes and can download a source-linked CSV report for the closeout.
+**The solution:** Tillmatch imports both sides, applies a conservative deterministic rule, records its source and outcome, and leaves uncertain rows open. It never moves money and never treats an AI response as financial approval.
 
-Tillmatch does not move money. It does not fabricate sample merchant data or turn an error into a success state. Raw CSV text is parsed for import and is not stored as a file; the application stores the selected source fields needed for the closeout and source provenance.
+## How a closeout works
 
-## Agent-Native in the product
+```mermaid
+flowchart LR
+    P[Paystack settlement API or CSV] --> I[Validate and import]
+    B[Receiving bank statement CSV] --> I
+    I --> S[(Account-scoped source records)]
+    S --> M[Deterministic closeout]
+    M --> C[Exact unique candidate]
+    M --> E[Open exception]
+    C --> H[Person inspects both sources]
+    H -->|Confirms| R[(Persisted confirmation)]
+    E --> T[Person records follow-up tag]
+    S --> A[Agent reads and explains evidence]
+    A -. cannot confirm .-> H
+    R --> X[Source-linked CSV report]
+```
 
-Tillmatch is built on **Agent-Native `@agent-native/core` 0.222.2**. The framework supplies the application runtime, authenticated actions, and agent workspace. Product actions expose typed operations for reading saved closeouts, importing source rows, fetching Paystack settlements, running reconciliation, reviewing exceptions, and confirming a match. The matching decision is deterministic and source-grounded. An agent may inspect and explain stored evidence, but confirmation remains a human-only action.
+1. **Sign in and select an environment.** The closeout desk is private. Choose the Paystack test or live environment so settlement records remain clearly labeled.
+2. **Import the provider side.** Read the merchant's Paystack settlements for a date range using a server-side read-only request, or upload an actual settlement export. CSV columns for settlement ID, date, amount, currency, and status are mapped explicitly; the amount unit is selected explicitly too.
+3. **Import the bank side.** Upload the statement from the account that receives the payouts. Map the posted date, credit amount, and currency. The parser accepts positive credits and reports malformed or unsupported values instead of silently guessing.
+4. **Run closeout.** Tillmatch compares exact integer minor-unit amounts and currency codes. By default, a bank credit must be within three calendar days of the settlement date. The candidate must be unique in both directions: one settlement to one bank credit.
+5. **Inspect the evidence.** The result shows the settlement source ID or source row, bank statement row, dates, amount, currency, status, and the reason for the decision. Ambiguous, invalid, non-settled, unmatched, partial, and many-to-one cases stay open. Fees, splits, and batched deposits are not inferred from amount alone.
+6. **Make and preserve the decision.** A signed-in person can confirm an exact candidate after reviewing both sources. Confirmation revalidates the current source rows, prevents reusing a settlement or bank credit, records who confirmed and when, then reads the persisted result back. Open exceptions can receive a follow-up tag without being marked resolved.
+7. **Export the closeout.** Download a CSV with source references, source hashes where available, result status, review tag, and reason.
 
-The Paystack integration calls the settlement-list API with a backend secret key and makes a `GET` request. The key is not sent to the browser. Test and live credentials are validated against the selected environment. A Paystack test key is useful for testing API configuration, but Paystack does not process settlements in test mode; it cannot provide a genuine settlement-to-bank reconciliation.
+## What makes the workflow careful
 
-## Hackathon submission
+- **Evidence before status.** A candidate links to the records that support it; the system does not manufacture a match when evidence is missing.
+- **Deterministic matching.** The match rule is inspectable and repeatable: exact currency, exact minor-unit amount, unique one-to-one candidate, and a bounded date window.
+- **Human confirmation.** A candidate is only a suggestion. The confirmation action is UI-only, rechecks uniqueness, rejects stale or already-used rows, and persists reviewer identity and time.
+- **Account boundaries.** Source rows, closeout runs, and review actions are queried using the signed-in account identity. Unauthenticated requests to protected actions are rejected.
+- **Minimal imported data.** CSV files are parsed in memory and not retained as uploaded files. The app stores fields needed for comparison and source provenance, not raw CSV, bank narration, account numbers, or customer names. Paystack credentials remain on the server.
+- **Safe failure.** Invalid data, missing configuration, a provider error, duplicate import, stale candidate, or absent source rows is surfaced as an error or open state—not as a success-shaped result.
 
-This project is submitted for the **Agent-Native Hackathon**, sponsored by Builder.io. Its core idea is a people-and-agent closeout workflow: the application gathers and compares financial source records, the agent can explain what the records support, and a person owns the final match decision.
+## Agent-Native and AI
 
-The submission uses Agent-Native as its application and action framework. The Tillmatch-specific work includes the separate public landing page and authenticated closeout dashboard, Paystack settlement reader, strict CSV parsing and explicit column mapping, source-linked persistence, deterministic one-to-one matching, human confirmation boundary, and closeout export.
+Tillmatch is built with **Agent-Native `@agent-native/core` 0.222.2**. Agent-Native provides the application runtime, authenticated typed actions, and the agent workspace. Tillmatch's product actions connect those capabilities to source import, Paystack reads, closeout, review, and report workflows.
 
-The hackathon requires a functional Agent-Native application and a **public Clips demonstration that viewers can watch without signing in**. A public repository and hosted deployment are encouraged. The submission also requires project and creator/team details, required rule and eligibility confirmations, and a submission receipt. These participant-specific details and submission steps must be completed by the entrant; this repository does not claim that the entry has been submitted.
+The reconciliation decision itself is deterministic TypeScript logic. The agent's role is to read persisted closeout evidence and explain what it supports. It must distinguish a candidate from a person-confirmed result, and it cannot call the confirmation or exception-review actions. This gives the user a conversational way to inspect the work without handing financial approval to a model.
 
-### Demo path
+## Built for the Agent-Native Hackathon
 
-1. Open the public landing page at `/` and follow **Open the closeout desk**.
-2. Sign in with the account created for the hosted application.
-3. On `/dashboard`, choose **Test account** when using a test key. Show the actual empty state if no source records exist.
-4. If a model provider is configured, open **Ask the agent** and ask it to explain only records that are present. Show the real response or skip this part if the provider is unavailable.
-5. Explain that the full reconciliation flow requires an authorized Paystack settlement source and its corresponding real bank statement credit. Do not stage invented rows or describe a test-mode response as a live settlement.
+Tillmatch is a functional application built on the Agent-Native framework for the **Agent-Native Hackathon, sponsored by Builder.io**. It applies the hackathon's people-and-agent workflow to a concrete finance task: the app performs the source-grounded comparison, the agent can explain the evidence, and the person owns the consequential decision.
 
-With authorized records available, the full product path is: import/read the Paystack source, import the matching bank statement, run closeout, inspect candidate and exception evidence, confirm an exact candidate as a person, reload to verify persistence, and export the report. The repository does not include seeded product transactions. The small synthetic CSV fixture under `test/fixtures/` is only for isolated parser tests.
+The project-specific implementation includes the public Tillmatch landing page, separate authenticated closeout dashboard, Paystack settlement reader, strict CSV import and explicit field mapping, account-scoped persistence, exact-match engine, exception review, human confirmation, and source-linked export. The app uses the Agent-Native chat template and its framework components alongside Tillmatch-specific routes and actions.
 
-## Current demo and integration status
+The official hackathon requires a functional Agent-Native app and a **public Clips recording viewable without login**. A public repository and hosted deployment are encouraged. Submission also requires project and creator/team details, eligibility and rules confirmations, and confirmation that the form submission was received. This repository does not claim that the Clip or entry has been submitted.
 
-- **Local Docker demonstration:** the app and PostgreSQL were reported healthy by the developer, and the HTTP smoke script passed for `/`, `/landing`, `/dashboard`, and `/chat`. These results are recorded from developer-supplied PowerShell output; they are not an independent inspection from this repository session.
-- **Hosted Render deployment:** deployment still requires connecting this repository to Render and supplying a persistent PostgreSQL database URL. A hosted sign-in and authenticated dashboard walkthrough must be checked after deployment.
-- **Paystack:** only test-mode access is available to the developer. Test mode does not process settlements, so no genuine settlement-to-bank match is claimed.
-- **Model:** the chat route is part of the application. A successful hosted model response has not been verified; configure a real provider before including the agent response in a demo.
-- **Public Clips and final entry:** not yet recorded/submitted. The public clip must be viewable without login, and submission is complete only after the form confirms receipt.
+## Demo
+
+The public page is `/`. The signed-in closeout desk is `/dashboard`; the agent workspace is `/chat`.
+
+For a full data-backed walkthrough, use authorized Paystack settlement records and the corresponding real bank statement. The flow is: import/read both sources → run closeout → inspect the proposed match and unresolved rows → confirm only after checking the sources → reload and show the saved confirmation → export the report.
+
+The developer currently has access to Paystack test mode only. Paystack test mode does not process settlements, so a test key cannot produce a genuine payout-to-bank reconciliation. Until authorized real settlement and bank records are available, the honest demo is the hosted product, authenticated empty state, and the source review workflow; no live match should be claimed. The app includes no seeded merchant transactions. Its small synthetic CSV fixture is isolated under `test/fixtures/` for parser tests and is never loaded by the product.
+
+If an agent response is included, configure a real model provider and show the actual response. A prompt suitable for an empty workspace is:
+
+> Using only the records available in this workspace, tell me whether any Paystack settlement has a matching bank credit. If no records are loaded, say that no conclusion is possible. Do not invent records or confirm a match.
+
+Skip that segment if the model provider is unavailable; the app can be demonstrated without presenting an unverified model response.
+
+## Technology
+
+- Agent-Native `@agent-native/core` 0.222.2 and Agent-Native Toolkit
+- React 19 and React Router 8 in framework mode
+- TypeScript for typed framework actions; JavaScript modules for CSV, matching, and Paystack client logic
+- Drizzle ORM with PostgreSQL for hosted persistence; Agent-Native development storage for local work
+- Paystack settlement list API, accessed server-side with read-only `GET` requests
+- Node.js 22.22+ and pnpm 10.29.1
 
 ## Run locally
-
-Requirements: Node.js 22.22 or newer and pnpm 10.29.1 (via Corepack).
 
 ```powershell
 corepack enable
@@ -59,9 +88,18 @@ pnpm install --frozen-lockfile
 pnpm dev -- --host 127.0.0.1
 ```
 
-The public landing page is `/`; the authenticated product workspace is `/dashboard`; the agent workspace is `/chat`. Local development uses Agent-Native's development storage and authentication behavior. A development identity is not a production user identity.
+Open the local URL printed by the development server. Local development storage and local development authentication are for development only; they do not represent a production account or deployment.
 
-## Verification commands
+To run the local PostgreSQL Compose stack with generated local-only credentials:
+
+```powershell
+./scripts/prepare-docker-env.ps1
+docker compose --env-file .env.docker up --build
+```
+
+The generated `.env.docker` file is local-only and ignored by Git. Do not copy local Compose credentials or data into a hosted deployment.
+
+## Run checks
 
 ```powershell
 pnpm typecheck
@@ -69,52 +107,44 @@ node test/run.mjs
 node scripts/verify-http.mjs http://127.0.0.1:3000
 ```
 
-The unit tests cover CSV validation, matching behavior, Paystack configuration and the API client's request contract. The HTTP script checks route status and selected page content; an HTTP 200 dashboard response does not prove a signed-in session, browser interaction, Paystack request, or model response. Use the URL of the actual running app when invoking the HTTP script.
+The isolated tests cover CSV parsing and validation, matching outcomes, Paystack key/environment validation, and the Paystack client request contract. They do not make a real Paystack request or verify a model provider. The HTTP script checks route responses and selected page content; HTTP 200 does not prove browser interaction, signed-in access, or a successful data workflow.
 
-## Hosted deployment on Render
+## Deploy to Render
 
-`render.yaml` describes a Node web service using the `render_com` Nitro preset and `/dashboard` health check. Connect this repository to Render and create/provide a **persistent PostgreSQL database** before deploying; the blueprint prompts for `DATABASE_URL` and does not provision the database itself.
+`render.yaml` defines the Node web service, Render Nitro preset, build/start commands, and `/dashboard` health check. Connect this repository to Render and provide a **persistent PostgreSQL database**; the blueprint asks for `DATABASE_URL` but does not provision a database.
 
-Set these values through Render's environment settings:
+Configure these values in Render's service environment:
 
-| Variable | Value |
+| Variable | Configuration |
 | --- | --- |
-| `DATABASE_URL` | Connection URL for the persistent hosted PostgreSQL database |
-| `BETTER_AUTH_SECRET` | A fresh, private secret; Render's blueprint is configured to generate it |
-| `PAYSTACK_SECRET_KEY` | Optional server-side key; use the matching test or live key only |
-| `PAYSTACK_ENVIRONMENT` | `test` for a test key, or `live` for a live key |
-| `OPENAI_API_KEY` | Optional; required only if the deployment will use the OpenAI provider for agent responses |
+| `DATABASE_URL` | URL for the persistent hosted PostgreSQL database |
+| `BETTER_AUTH_SECRET` | Private, stable auth secret; the blueprint asks Render to generate it |
+| `PAYSTACK_SECRET_KEY` | Optional server-side `sk_test_...` or `sk_live_...` key |
+| `PAYSTACK_ENVIRONMENT` | `test` or `live`, matching the secret key |
+| `OPENAI_API_KEY` | Optional; set only when using OpenAI for agent responses |
 
-Leave `APP_URL` and `BETTER_AUTH_URL` unset on Render so the public URL can be inferred. Never commit secrets, put them in browser code, or include them in a recording. Keep `AUTH_DISABLED` off in hosted production. After deploy, verify `/`, `/landing`, `/dashboard`, and `/chat`, then sign in and confirm the authenticated dashboard and its actual empty state.
+On Render, leave `APP_URL` and `BETTER_AUTH_URL` unset so the public origin can be inferred. Keep production authentication enabled. Never commit secrets or enter them in a browser field, chat prompt, README, or recording. After deploying, check `/`, `/landing`, `/dashboard`, and `/chat`; then sign in and verify the authenticated dashboard and its real data state.
 
-### Local Docker Compose
+## Project map
 
-The application can also be run locally with Docker Desktop and PostgreSQL:
+| Path | Purpose |
+| --- | --- |
+| `app/routes/landing.tsx` | Public Tillmatch product page |
+| `app/routes/dashboard.tsx` | Closeout dashboard, CSV mapping, review, and export |
+| `actions/actions/` | Authenticated application operations and agent-tool permissions |
+| `src/csv.mjs` | Strict CSV parsing and amount/date normalization |
+| `src/matcher.mjs` | Deterministic exact, unique one-to-one match logic |
+| `src/paystack.mjs` | Read-only Paystack settlement API client |
+| `server/server/db/schema.ts` | Persisted source records, runs, results, and confirmations |
+| `test/` | Isolated parser, matcher, and Paystack client tests |
+| `render.yaml` | Render service configuration |
 
-```powershell
-./scripts/prepare-docker-env.ps1
-docker compose --env-file .env.docker up --build
-```
-
-This is a local development stack, not the hosted production database. The generated `.env.docker` file is private local configuration and is ignored by Git.
-
-## Main implementation areas
-
-- `app/routes/landing.tsx` and `app/routes/landing.css` — public product landing page.
-- `app/routes/dashboard.tsx` and `app/routes/closeout.css` — authenticated closeout interface and source review.
-- `src/csv.mjs` — strict CSV parsing, explicit mappings, and amount/date validation.
-- `src/paystack.mjs` — environment-checked, read-only Paystack settlement API client.
-- `src/matcher.mjs` — deterministic unique exact-amount, exact-currency matching and safe unresolved outcomes.
-- `actions/actions/` — authenticated, typed application operations and the human confirmation boundary.
-- `server/server/db/schema.ts` — persisted source, run, and review data.
-- `test/` — isolated parser, matcher, and Paystack client tests.
-
-## Hackathon rules and references
+## References
 
 - [Agent-Native Hackathon official rules](https://www.builder.io/hackathon/rules)
 - [Agent-Native documentation](https://www.agent-native.com/docs/)
-- [Agent-Native Docker deployment guide](https://www.agent-native.com/docs/docker/)
-- [Paystack authentication and test/live environments](https://paystack.com/docs/api/authentication/)
+- [Agent-Native Docker guide](https://www.agent-native.com/docs/docker/)
+- [Paystack API authentication and test/live modes](https://paystack.com/docs/api/authentication/)
 - [Paystack settlement API](https://paystack.com/docs/api/settlement/)
 
-The official rules and deadline can change; check the linked rules when submitting. As of this README, the published deadline is November 9, 2026 at 11:59 PM Pacific Time. The entrant must verify current rules, eligibility, originality disclosure, team authorization, and final submission receipt.
+Check the official rules at submission time for current dates, eligibility, required information, and form instructions. The published deadline is November 9, 2026 at 11:59 PM Pacific Time.
