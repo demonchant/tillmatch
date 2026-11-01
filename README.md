@@ -4,6 +4,8 @@
 
 Tillmatch is a payout closeout workspace for merchants and finance operators. It brings Paystack settlement records and bank statement credits into one review flow, shows the source evidence behind each result, and keeps a person responsible for confirming a match.
 
+**Live app:** [tillmatch.onrender.com](https://tillmatch.onrender.com)
+
 **The problem:** payout reconciliation is often a manual comparison between one provider's settlement report and another institution's bank statement. The records use different references and arrive at different times. An exact match is straightforward; a delayed, ambiguous, partial, or batched deposit needs investigation. A spreadsheet can show matching amounts, but it does not by itself preserve why a match was proposed or who accepted it.
 
 **The solution:** Tillmatch imports both sides, applies a conservative deterministic rule, records its source and outcome, and leaves uncertain rows open. It never moves money and never treats an AI response as financial approval.
@@ -59,7 +61,7 @@ The official hackathon requires a functional Agent-Native app and a **public Cli
 
 ## Demo
 
-The public page is `/`. The signed-in closeout desk is `/dashboard`; the agent workspace is `/chat`.
+The hosted app is [tillmatch.onrender.com](https://tillmatch.onrender.com). Its public page is `/`; the signed-in closeout desk is `/dashboard`; the agent workspace is `/chat`.
 
 For a full data-backed walkthrough, use authorized Paystack settlement records and the corresponding real bank statement. The flow is: import/read both sources → run closeout → inspect the proposed match and unresolved rows → confirm only after checking the sources → reload and show the saved confirmation → export the report.
 
@@ -111,7 +113,7 @@ The isolated tests cover CSV parsing and validation, matching outcomes, Paystack
 
 ## Deploy to Render
 
-`render.yaml` defines the Node web service and a PostgreSQL database in the **Frankfurt region**, plus the Render Nitro build/start commands and `/dashboard` health check. It pins Node.js 24.22.1 and invokes the repository-pinned pnpm through Corepack without enabling global pnpm symlinks. Create the Render service using **New > Blueprint** and select this repository. Render provisions the database and injects its private internal connection string into the web service as `DATABASE_URL`; you do not need to create or paste a database URL yourself. The web service and database use the same region, so they can communicate over Render's private network. Render documents Blueprint database references in its [Blueprint specification](https://render.com/docs/blueprint-spec) and database connections in the [Postgres connection guide](https://render.com/docs/postgresql-creating-connecting).
+`render.yaml` defines the Node web service and a PostgreSQL database in the **Frankfurt region**, plus the Render Nitro build/start commands and `/dashboard` health check. It pins Node.js 24.22.1 and invokes the repository-pinned pnpm through Corepack without enabling global pnpm symlinks. For a fresh Render setup, create a service using **New > Blueprint** and select this repository. Render provisions the database and injects its private internal connection string into the web service as `DATABASE_URL`; you do not need to create or paste a database URL yourself. The web service and database use the same region, so they can communicate over Render's private network. Render documents Blueprint database references in its [Blueprint specification](https://render.com/docs/blueprint-spec) and database connections in the [Postgres connection guide](https://render.com/docs/postgresql-creating-connecting).
 
 The Blueprint uses Render's Free Postgres plan. Free databases expire 30 days after creation; upgrade the database if you need the hosted data to remain available beyond that period. [Render Free plan limits](https://render.com/docs/free).
 
