@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: tillmatch
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm migrate:production && NITRO_PRESET=render_com pnpm build
+    startCommand: node .output/server/index.mjs
+    healthCheckPath: /dashboard
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: BETTER_AUTH_SECRET
+        generateValue: true
+      - key: PAYSTACK_SECRET_KEY
+        sync: false
+      - key: PAYSTACK_ENVIRONMENT
+        value: test
+      - key: OPENAI_API_KEY
+        sync: false

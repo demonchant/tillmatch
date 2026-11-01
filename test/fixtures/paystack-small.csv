@@ -1,0 +1,5 @@
+# UNIT TEST FIXTURE ONLY. Synthetic parser test data; never product/demo/acceptance data.
+id,amount,currency,status,settlement_date
+10001,12890,NGN,success,2026-10-28T00:00:00.000Z
+10002,0,NGN,success,2026-10-29T00:00:00.000Z
+10003,4400,NGN,pending,2026-10-30T00:00:00.000Z
